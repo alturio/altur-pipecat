@@ -328,12 +328,14 @@ class CompletenessCheck(FrameProcessor):
             await self._notifier.notify()
         elif isinstance(frame, TextFrame) and frame.text == "NO":
             logger.debug("!!! Completeness check NO")
+        else:
+            await self.push_frame(frame, direction)
 
 
 class OutputGate(FrameProcessor):
-    def __init__(self, notifier: BaseNotifier, **kwargs):
+    def __init__(self, *, notifier: BaseNotifier, start_open: bool = False, **kwargs):
         super().__init__(**kwargs)
-        self._gate_open = False
+        self._gate_open = start_open
         self._frames_buffer = []
         self._notifier = notifier
 
@@ -371,7 +373,7 @@ class OutputGate(FrameProcessor):
 
     async def _start(self):
         self._frames_buffer = []
-        self._gate_task = self.get_event_loop().create_task(self._gate_task_handler())
+        self._gate_task = self.create_task(self._gate_task_handler())
 
     async def _stop(self):
         await self.cancel_task(self._gate_task)
@@ -459,7 +461,9 @@ async def main():
         # sentence, this will wake up the notifier if that happens.
         user_idle = UserIdleProcessor(callback=user_idle_notifier, timeout=5.0)
 
-        bot_output_gate = OutputGate(notifier=notifier)
+        # We start with the gate open because we send an initial context frame
+        # to start the conversation.
+        bot_output_gate = OutputGate(notifier=notifier, start_open=True)
 
         async def block_user_stopped_speaking(frame):
             return not isinstance(frame, UserStoppedSpeakingFrame)
